@@ -1,15 +1,40 @@
-# retrieve aws user name from ARN format: arn:aws:iam::361863697511:user/charlin
 locals {
     arn_elements = split(":", data.aws_caller_identity.current.arn)
     caller_name = substr(local.arn_elements[length(local.arn_elements)-1], 5, -1)
 }
 
+resource "aws_default_vpc" "default" {
+  tags = {
+    Name = "Default VPC"
+  }
+}
+
+resource "aws_default_subnet" "default_az1" {
+  availability_zone = "${var.az1}"
+
+  tags = {
+    Name = "Default subnet for az1."
+  }
+}
+
+resource "aws_default_subnet" "default_az2" {
+  availability_zone = "${var.az2}"
+
+  tags = {
+    Name = "Default subnet for az2.."
+  }
+}
+
 resource "aws_eks_cluster" "aws_eks" {
-  name     = "${var.cluster-name}-${local.caller_name}"
+  #name     = "${var.cluster-name}-${local.caller_name}"
+  name     = "${var.cluster-name}"
   role_arn = aws_iam_role.eks_cluster.arn
+#  version  = "1.24"
 
   vpc_config {
-    subnet_ids = module.vpc.public_subnets
+    subnet_ids             = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
+    endpoint_public_access = true
+    public_access_cidrs    = var.cluster_api_public_access_cidrs
   }
 
   depends_on = [
@@ -18,7 +43,7 @@ resource "aws_eks_cluster" "aws_eks" {
   ]
 
   tags = {
-    Name = var.cluster-name
+    Name = var.cluster-name,
   }
 }
 
@@ -26,13 +51,13 @@ resource "aws_eks_node_group" "node" {
   cluster_name    = aws_eks_cluster.aws_eks.name
   node_group_name = "ng_${var.cluster-name}"
   node_role_arn   = aws_iam_role.eks_nodes.arn
-  subnet_ids      = module.vpc.public_subnets
+  subnet_ids      = [aws_default_subnet.default_az1.id]
 
 
   instance_types = ["t3.medium"]
 
   scaling_config {
-    desired_size = 4
+    desired_size = 2
     max_size     = 4
     min_size     = 1
   }
@@ -66,3 +91,12 @@ resource "null_resource" "local_k8s_context" {
   }
 }
 
+#install add-ons
+#resource "aws_eks_addon" "addons"{
+#  depends_on = [aws_eks_cluster.aws_eks]
+#  cluster_name      = "${var.cluster-name}-${local.caller_name}"
+#  addon_name        = "aws-ebs-csi-driver"
+#  addon_version     = "v1.15.0-eksbuild.1"
+#  resolve_conflicts = "OVERWRITE"
+#  service_account_role_arn = "arn:aws:iam::857039790457:role/AmazonEKS_EBS_CSI_DriverRole"
+#} 
