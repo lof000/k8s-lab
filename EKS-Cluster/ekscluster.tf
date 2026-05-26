@@ -1,6 +1,7 @@
 locals {
-    arn_elements = split(":", data.aws_caller_identity.current.arn)
-    caller_name = substr(local.arn_elements[length(local.arn_elements)-1], 5, -1)
+  arn_elements = split(":", data.aws_caller_identity.current.arn)
+  caller_name  = substr(local.arn_elements[length(local.arn_elements) - 1], 5, -1)
+  node_who     = var.node_who != "" ? var.node_who : var.cluster-name
 }
 
 resource "aws_default_vpc" "default" {
@@ -32,9 +33,10 @@ resource "aws_eks_cluster" "aws_eks" {
 #  version  = "1.24"
 
   vpc_config {
-    subnet_ids             = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
-    endpoint_public_access = true
-    public_access_cidrs    = var.cluster_api_public_access_cidrs
+    subnet_ids              = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
+    endpoint_public_access  = true
+    endpoint_private_access = true
+    public_access_cidrs     = var.cluster_api_public_access_cidrs
   }
 
   depends_on = [
@@ -51,7 +53,7 @@ resource "aws_eks_node_group" "node" {
   cluster_name    = aws_eks_cluster.aws_eks.name
   node_group_name = "ng_${var.cluster-name}"
   node_role_arn   = aws_iam_role.eks_nodes.arn
-  subnet_ids      = [aws_default_subnet.default_az1.id]
+  subnet_ids      = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
 
 
   instance_types = ["t3.medium"]
@@ -60,6 +62,14 @@ resource "aws_eks_node_group" "node" {
     desired_size = 2
     max_size     = 4
     min_size     = 1
+  }
+
+  tags = {
+    who = local.node_who
+  }
+
+  labels = {
+    who = local.node_who
   }
 
   # Optional: Allow external changes without Terraform plan difference
@@ -74,6 +84,16 @@ resource "aws_eks_node_group" "node" {
     aws_iam_role_policy_attachment.AmazonEKS_CNI_Policy,
     aws_iam_role_policy_attachment.AmazonEC2ContainerRegistryReadOnly,
   ]
+}
+
+resource "aws_autoscaling_group_tag" "node_who" {
+  autoscaling_group_name = aws_eks_node_group.node.resources[0].autoscaling_groups[0].name
+
+  tag {
+    key                 = "who"
+    value               = local.node_who
+    propagate_at_launch = true
+  }
 }
 
 # Set up local kubectl credential and context

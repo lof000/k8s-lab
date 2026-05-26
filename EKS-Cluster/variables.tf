@@ -1,5 +1,5 @@
 variable "cluster-name" {
-  default = "eks_lab"
+  default = "eks_latam_lab"
   type    = string
   description = "eks clustar name"
 }
@@ -41,6 +41,12 @@ variable "addons" {
       version = "v1.15.0-eksbuild.1"
     }
   ]
+}
+
+variable "node_who" {
+  description = "Value for the 'who' tag/label on worker nodes. Defaults to cluster-name when unset."
+  type        = string
+  default     = ""
 }
 
 variable "cluster_api_public_access_cidrs" {
